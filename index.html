@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101111">
+  <title>Blackout — quiet screen</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #101111; color: #f2f2ed; }
+    button, textarea { font: inherit; }
+    .editor { min-height: 100vh; display: grid; place-items: center; padding: 32px 20px; }
+    .panel { width: min(100%, 620px); }
+    .eyebrow { color: #92958e; font-size: 11px; font-weight: 650; letter-spacing: .2em; text-transform: uppercase; margin-bottom: 13px; }
+    h1 { font-size: clamp(36px, 7vw, 54px); line-height: 1; letter-spacing: -.055em; margin: 0 0 12px; font-weight: 580; }
+    .intro { color: #a7aaa2; margin: 0 0 28px; line-height: 1.6; font-size: 14px; }
+    textarea { display: block; width: 100%; min-height: 230px; resize: vertical; padding: 18px 19px; border: 1px solid #353834; border-radius: 12px; background: #191b1a; color: #f2f2ed; line-height: 1.65; outline: none; transition: border-color .2s, box-shadow .2s; }
+    textarea:focus { border-color: #898d83; box-shadow: 0 0 0 3px #ffffff0b; }
+    textarea::placeholder { color: #73766f; }
+    .actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 16px; }
+    .hint { color: #858981; font-size: 12px; }
+    .primary { appearance: none; border: 0; border-radius: 8px; padding: 12px 18px; color: #151615; background: #eceee6; font-weight: 650; cursor: pointer; transition: transform .15s, background .15s; }
+    .primary:hover { background: white; transform: translateY(-1px); }
+    .primary:focus-visible, .exit:focus-visible { outline: 2px solid #b6c78c; outline-offset: 3px; }
+    .stage { position: fixed; inset: 0; z-index: 5; background: #000; display: none; color: #fff; cursor: none; }
+    .stage.active { display: grid; place-items: center; }
+    .stage-text { width: min(1100px, 90vw); max-height: 86vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: clamp(15px, 2vw, 25px); line-height: 1.5; letter-spacing: 0; tab-size: 4; }
+    .stage.hidden-text .stage-text { visibility: hidden; }
+    @media (max-width: 520px) { .editor { padding: 28px 18px; } .actions { align-items: flex-start; flex-direction: column; } .primary { width: 100%; } }
+  </style>
+</head>
+<body>
+  <main class="editor" id="editor">
+    <section class="panel" aria-labelledby="title">
+      <div class="eyebrow">A quiet screen</div>
+      <h1 id="title">Blackout</h1>
+      <p class="intro">Paste or write something below. When you’re ready, go full screen and reveal it only when you want to.</p>
+      <textarea id="note" placeholder="Your text goes here…" aria-label="Text to show in blackout mode"></textarea>
+      <div class="actions">
+        <span class="hint">In blackout mode: Ctrl + Space shows or hides text · Ctrl + Esc exits.</span>
+        <button class="primary" id="go">Go Black <span aria-hidden="true">↗</span></button>
+      </div>
+    </section>
+  </main>
+  <section class="stage hidden-text" id="stage" aria-label="Blackout screen" aria-hidden="true">
+    <div class="stage-text" id="stageText"></div>
+  </section>
+  <script>
+    const editor = document.getElementById('editor');
+    const note = document.getElementById('note');
+    const stage = document.getElementById('stage');
+    const stageText = document.getElementById('stageText');
+    const go = document.getElementById('go');
+    let active = false;
+    let textVisible = false;
+
+    function updateVisibility() {
+      stage.classList.toggle('hidden-text', !textVisible);
+      stageText.textContent = note.value;
+    }
+    async function enterBlackout() {
+      active = true;
+      textVisible = false;
+      stageText.textContent = note.value;
+      stage.classList.add('active', 'hidden-text');
+      stage.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      try { await document.documentElement.requestFullscreen?.(); } catch (_) { /* Full-screen may be blocked; the blackout still works in the tab. */ }
+    }
+    async function leaveBlackout() {
+      if (!active) return;
+      active = false;
+      stage.classList.remove('active');
+      stage.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+      if (document.fullscreenElement) {
+        try { await document.exitFullscreen(); } catch (_) { /* Browser or Escape may have exited already. */ }
+      }
+      go.focus();
+    }
+    go.addEventListener('click', enterBlackout);
+    document.addEventListener('keydown', (event) => {
+      if (!active) return;
+      const control = event.ctrlKey || event.metaKey;
+      if (control && event.code === 'Escape') { event.preventDefault(); leaveBlackout(); return; }
+      if (control && event.code === 'Space' && !event.repeat) {
+        event.preventDefault();
+        textVisible = !textVisible;
+        updateVisibility();
+        return;
+      }
+      // Keep all other keyboard input from interacting with the browser or page while blacked out.
+      event.preventDefault();
+      event.stopPropagation();
+    }, true);
+    document.addEventListener('keyup', (event) => {
+      if (!active) return;
+      event.preventDefault();
+      event.stopPropagation();
+    }, true);
+    document.addEventListener('keypress', (event) => {
+      if (!active) return;
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    document.addEventListener('fullscreenchange', () => {
+      // Escape can leave native full screen; keep the blackout active until the explicit exit.
+    });
+  </script>
+</body>
+</html>
